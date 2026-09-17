@@ -228,6 +228,12 @@ rpar.RespectCanCollide = true
 
 local conns = {}
 
+local function getCAC()
+	local cac = getgenv()._customAnimationController
+	if cac and cac.Active then return cac end
+	return nil
+end
+
 local function updrf()
 	local ex = {}
 	for _, p in ipairs(plrs:GetPlayers()) do
@@ -240,6 +246,12 @@ local function updrf()
 end
 
 local function spanim()
+	local cac = getCAC()
+	if cac then
+		cac:StopAllAnimations()
+		cstate = nil
+		return
+	end
 	for _, t in pairs(lanims) do
 		if t.IsPlaying then t:Stop(0.2) end
 	end
@@ -265,6 +277,32 @@ local function ldanim(st)
 end
 
 local function planim(st, spd)
+	local cac = getCAC()
+	if cac then
+		if st == "walk" then
+			cac.Pose = "Running"
+		elseif st == "idle" then
+			cac.Pose = "Standing"
+		elseif st == "jump" then
+			cac.Pose = "Jumping"
+		elseif st == "fall" then
+			cac.Pose = "FreeFall"
+		end
+
+		if cstate == st then
+			if spd and st ~= "walk" then
+				cac:SetAnimationSpeed(spd)
+			end
+			return
+		end
+		cstate = st
+		cac:PlayAnimation(st, 0.2)
+		if spd and st ~= "walk" then
+			cac:SetAnimationSpeed(spd)
+		end
+		return
+	end
+
 	spd = spd or 1
 	if cstate == st then
 		if st ~= "walk" and lanims[st] then lanims[st]:AdjustSpeed(spd) end
@@ -287,6 +325,14 @@ local function planim(st, spd)
 end
 
 local function updwrb(spd)
+	local cac = getCAC()
+	if cac then
+		if cstate == "walk" then
+			cac:SetRunSpeed(spd / 16)
+		end
+		return
+	end
+
 	local w = lanims["walk"]
 	local r = lanims["run"]
 	if not w and not r then return end
@@ -896,10 +942,15 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 			hum.PlatformStand = true
 			local asc = chr:FindFirstChild("Animate")
 			if asc then asc.Enabled = false end
-			for _, t in ipairs(animtr:GetPlayingAnimationTracks()) do
-				if t.Priority == Enum.AnimationPriority.Core or t.Priority == Enum.AnimationPriority.Movement then
-					t:Stop(0.1)
+			local cac = getCAC()
+			if not cac then
+				for _, t in ipairs(animtr:GetPlayingAnimationTracks()) do
+					if t.Priority == Enum.AnimationPriority.Core or t.Priority == Enum.AnimationPriority.Movement then
+						t:Stop(0.1)
+					end
 				end
+			else
+				cstate = nil
 			end
 		end
 
