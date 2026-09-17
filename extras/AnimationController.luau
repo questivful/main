@@ -1582,7 +1582,7 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 updateCategoryStyles()
-window:Show({ Align = "left", Pos = 1 })
+window:Show({ Align = "right", Pos = 2 })
 
 task.defer(function()
     task.wait(0.2)
