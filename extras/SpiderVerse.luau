@@ -227,7 +227,6 @@ rpar.IgnoreWater = true
 rpar.RespectCanCollide = true
 
 local conns = {}
-local seenChars = {}
 
 local function updrf()
 	local ex = {}
@@ -361,7 +360,6 @@ local function tsl(st)
 	end
 end
 
-local chTransDirty = true
 local lastIfp = nil
 
 local function stchr(c)
@@ -395,7 +393,6 @@ local function stchr(c)
 	lvel.Enabled = false
 	lvel.Parent = hrp
 
-	chTransDirty = true
 	lastIfp = nil
 	updrf()
 end
@@ -942,12 +939,8 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 		if not grnd then thv = thv * acf end
 		lvel.VectorVelocity = thv + cup * vvel
 
-		local upDot = cup:Dot(Vector3.yAxis)
-		local onWall = grnd and upDot < 0.7
 		if grnd then
-			if onWall and imv then
-				planim("climb", math.clamp(mm * 1.4, 0.55, 2))
-			elseif imv then
+			if imv then
 				planim("walk")
 				updwrb(mm * hum.WalkSpeed)
 			else
