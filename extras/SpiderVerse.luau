@@ -328,7 +328,7 @@ local function updwrb(spd)
 	local cac = getCAC()
 	if cac then
 		if cstate == "walk" then
-			cac:SetRunSpeed(spd / 16)
+			cac:SetRunSpeed(spd)
 		end
 		return
 	end
