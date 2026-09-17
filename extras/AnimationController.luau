@@ -517,15 +517,15 @@ if getgenv()._animWindow then
     getgenv()._animWindow = nil
 end
 
-local BaseGrey = Color3.fromRGB(45, 45, 45)
+local BaseGrey = Color3.fromRGB(25, 25, 25)
 local Theme = {
     Background = BaseGrey,
-    Hover = Color3.fromRGB(60, 60, 60),
-    Active = Color3.fromRGB(70, 70, 70),
-    Text = Color3.fromRGB(240, 240, 240),
-    TextDim = Color3.fromRGB(170, 170, 170),
-    Placeholder = Color3.fromRGB(140, 140, 140),
-    Danger = Color3.fromRGB(180, 90, 90),
+    Hover = Color3.fromRGB(42, 42, 42),
+    Active = Color3.fromRGB(55, 55, 55),
+    Text = Color3.fromRGB(235, 235, 235),
+    TextDim = Color3.fromRGB(150, 150, 150),
+    Placeholder = Color3.fromRGB(120, 120, 120),
+    Danger = Color3.fromRGB(200, 80, 80),
 }
 
 DockManager.SetTheme(BaseGrey)
