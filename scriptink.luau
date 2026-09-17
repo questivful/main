@@ -473,6 +473,7 @@ local cmdUsages = {
     ["jp"] = "jp [number]",
     ["automask"] = "automask",
     ["spiderverse"] = "spiderverse",
+    ["animationcontroller"] = "animationcontroller",
     ["chat"] = "chat [message]"
 }
 
@@ -705,6 +706,7 @@ cmds.help = function(a)
     out(" deflectaim - auto-kill aimers (on/off)", Color3.fromRGB(180, 180, 180))
     out(" automask - auto-buy and equip mask", Color3.fromRGB(180, 180, 180))
     out(" spiderverse - load spiderverse script", Color3.fromRGB(180, 180, 180))
+    out(" animationcontroller - open animation controller", Color3.fromRGB(180, 180, 180))
     out(" chat - send a chat message", Color3.fromRGB(180, 180, 180))
     out(" \\<msg> - quick chat shortcut", Color3.fromRGB(180, 180, 180))
     out(" ws - alias for speed", Color3.fromRGB(180, 180, 180))
@@ -1960,6 +1962,20 @@ cmds.spiderverse = function(a)
     out("loading spiderverse...", Color3.fromRGB(150, 255, 150))
     pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/questivful/main/refs/heads/main/extras/SpiderVerse.luau"))()
+    end)
+end
+
+cmds.animationcontroller = function(a)
+    out("loading animation controller...", Color3.fromRGB(150, 255, 150))
+    task.spawn(function()
+        local ok, err = pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/questivful/main/refs/heads/main/extras/AnimationController.luau"))()
+        end)
+        if ok then
+            out("animation controller loaded.", Color3.fromRGB(150, 255, 150))
+        else
+            out("animation controller error: " .. tostring(err), Color3.fromRGB(255, 100, 100))
+        end
     end)
 end
 
