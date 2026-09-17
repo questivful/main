@@ -216,7 +216,7 @@ local vvel = 0
 local jcd = 0.25
 local gsf = 40
 local mgs = 60
-local acf = 1 
+local acf = 1
 local wsd = 2.5
 local gcd = 3.5
 local ucf = ws.CurrentCamera and ws.CurrentCamera.CFrame or CFrame.new()
@@ -224,16 +224,17 @@ local ucf = ws.CurrentCamera and ws.CurrentCamera.CFrame or CFrame.new()
 local rpar = RaycastParams.new()
 rpar.FilterType = Enum.RaycastFilterType.Exclude
 rpar.IgnoreWater = true
-rpar.RespectCanCollide = true 
+rpar.RespectCanCollide = true
 
 local conns = {}
+local seenChars = {}
 
 local function updrf()
 	local ex = {}
-	if chr then table.insert(ex, chr) end
-	for _, d in ipairs(ws:GetDescendants()) do
-		if d:IsA("Humanoid") and d.Parent then
-			table.insert(ex, d.Parent)
+	for _, p in ipairs(plrs:GetPlayers()) do
+		local c = p.Character
+		if c then
+			table.insert(ex, c)
 		end
 	end
 	rpar.FilterDescendantsInstances = ex
@@ -360,19 +361,22 @@ local function tsl(st)
 	end
 end
 
+local chTransDirty = true
+local lastIfp = nil
+
 local function stchr(c)
 	chr = c
 	hum = c:WaitForChild("Humanoid")
 	hrp = c:WaitForChild("HumanoidRootPart")
 	animtr = hum:WaitForChild("Animator", 3) or Instance.new("Animator", hum)
-	
+
 	lanims = {}
 	cstate = nil
 	ptrk = nil
-	
+
 	ratt = hrp:FindFirstChild("RootAttachment") or Instance.new("Attachment", hrp)
 	ratt.Name = "RootAttachment"
-	
+
 	aori = Instance.new("AlignOrientation")
 	aori.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	aori.Attachment0 = ratt
@@ -391,6 +395,8 @@ local function stchr(c)
 	lvel.Enabled = false
 	lvel.Parent = hrp
 
+	chTransDirty = true
+	lastIfp = nil
 	updrf()
 end
 
@@ -678,18 +684,28 @@ table.insert(conns, plr.CharacterAdded:Connect(function(c)
 	if not plr.Backpack:FindFirstChild(tnm) and not c:FindFirstChild(tnm) then gvt() end
 end))
 
-table.insert(conns, ws.DescendantAdded:Connect(function(d)
-	if d:IsA("Humanoid") then task.defer(updrf) end
+table.insert(conns, plrs.PlayerAdded:Connect(function(p)
+	local c1 = p.CharacterAdded:Connect(function()
+		task.defer(updrf)
+	end)
+	table.insert(conns, c1)
+	task.defer(updrf)
 end))
 
-table.insert(conns, ws.DescendantRemoving:Connect(function(d)
-	if d:IsA("Humanoid") then task.defer(updrf) end
+table.insert(conns, plrs.PlayerRemoving:Connect(function()
+	task.defer(updrf)
 end))
+
+for _, p in ipairs(plrs:GetPlayers()) do
+	local c1 = p.CharacterAdded:Connect(function()
+		task.defer(updrf)
+	end)
+	table.insert(conns, c1)
+end
 
 table.insert(conns, rs.RenderStepped:Connect(function()
-	if sgui.Enabled then
-		for rm, cm in pairs(cmtr) do cm.Transform = rm.Transform end
-	end
+	if not sgui.Enabled then return end
+	for rm, cm in pairs(cmtr) do cm.Transform = rm.Transform end
 end))
 
 local function istyp()
@@ -737,9 +753,9 @@ rs:BindToRenderStep("wcct", Enum.RenderPriority.Camera.Value + 1, function()
 	local cam = ws.CurrentCamera
 	if not cam or not hrp then return end
 	local ur = tup:Dot(Vector3.yAxis) > 0.99 and cup:Dot(Vector3.yAxis) > 0.99
-	if ur then 
+	if ur then
 		ucf = cam.CFrame
-		return 
+		return
 	end
 	ucf = cam.CFrame
 	local tr = grot(cup)
@@ -760,10 +776,13 @@ rs:BindToRenderStep("wcct", Enum.RenderPriority.Camera.Value + 1, function()
 	cam.Focus = tlf
 	local cdc = (tcf.Position - tfp).Magnitude
 	local ifp = cdc < 1.2
-	for _, d in ipairs(chr:GetDescendants()) do
-		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
-			if not d:FindFirstAncestorOfClass("Tool") then
-				d.LocalTransparencyModifier = ifp and 1 or 0
+	if ifp ~= lastIfp then
+		lastIfp = ifp
+		for _, d in ipairs(chr:GetDescendants()) do
+			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
+				if not d:FindFirstAncestorOfClass("Tool") then
+					d.LocalTransparencyModifier = ifp and 1 or 0
+				end
 			end
 		end
 	end
@@ -777,30 +796,30 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 	if not son then return end
 	local cam = ws.CurrentCamera
 	if not cam then return end
-	
+
 	local hh = hum.HipHeight > 0 and hum.HipHeight or 2
 	local th = hh + (hrp.Size.Y / 2)
 	local mv = ctrls:GetMoveVector()
-	
+
 	local fl = ucf.LookVector
 	local ff = Vector3.new(fl.X, 0, fl.Z)
 	if ff.Magnitude > 0.001 then ff = ff.Unit else ff = Vector3.new(0, 0, -1) end
 	local fr = ucf.RightVector
 	fr = Vector3.new(fr.X, 0, fr.Z)
 	if fr.Magnitude > 0.001 then fr = fr.Unit else fr = Vector3.new(1, 0, 0) end
-	
+
 	local fm = (ff * -mv.Z + fr * mv.X)
 	if fm.Magnitude > 1 then fm = fm.Unit end
-	
+
 	local tr = grot(cup)
 	local am = tr * fm
 	local mm = am.Magnitude
 	local imv = mm > 0.05
-	
+
 	local cu = tup
 	local cr = grot(cu)
 	local cm = cr * fm
-	
+
 	local cfw
 	if imv then
 		cfw = cm.Unit
@@ -808,16 +827,16 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 		local lf = hrp.CFrame.LookVector - hrp.CFrame.LookVector:Dot(cu) * cu
 		cfw = lf.Magnitude > 0.001 and lf.Unit or (cr * ff).Unit
 	end
-	
+
 	local ro = hrp.Position + cu * (th * 0.5)
 	local fwry = nil
 	if imv then
 		local fo = ro - cu * (th * 0.4)
 		fwry = ws:Raycast(fo, cm.Unit * wsd, rpar)
 	end
-	
+
 	local gry = ws:Raycast(ro, -cu * (th * 1.5 + gcd), rpar)
-	
+
 	if tick() - ljmp > jcd * 0.5 then
 		if fwry then
 			tup = fwry.Normal
@@ -838,7 +857,7 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 	else
 		grnd = false
 	end
-	
+
 	if not grnd then
 		local vd = lvel.VectorVelocity
 		if vd.Magnitude > 0.1 then
@@ -854,12 +873,12 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 			if dry then tup = dry.Normal else tup = tup:Lerp(Vector3.yAxis, dt * 2).Unit end
 		end
 	end
-	
+
 	cup = cup:Lerp(tup, 20 * dt).Unit
 	tr = grot(cup)
-	
+
 	local ur = tup:Dot(Vector3.yAxis) > 0.99 and cup:Dot(Vector3.yAxis) > 0.99
-	
+
 	if ur then
 		if not uprt then
 			uprt = true
@@ -886,11 +905,11 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 				end
 			end
 		end
-		
+
 		local cdc = (cam.CFrame.Position - cam.Focus.Position).Magnitude
 		local ifp = cdc < 1.2
 		local ia = uis.MouseBehavior == Enum.MouseBehavior.LockCenter or ifp
-		
+
 		local lfw
 		if ia then
 			lfw = (tr * ff).Unit
@@ -900,10 +919,10 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 			local flh = hrp.CFrame.LookVector - hrp.CFrame.LookVector:Dot(cup) * cup
 			lfw = flh.Magnitude > 0.001 and flh.Unit or (tr * ff).Unit
 		end
-		
+
 		aori.CFrame = CFrame.lookAt(Vector3.zero, lfw, cup)
-		local eg = ws.Gravity 
-		
+		local eg = ws.Gravity
+
 		if grnd then
 			if gry then
 				local td = gry.Distance - (th * 0.5)
@@ -918,13 +937,17 @@ table.insert(conns, rs.Heartbeat:Connect(function(dt)
 			local mf = -150
 			if vvel < mf then vvel = mf end
 		end
-		
+
 		local thv = am * hum.WalkSpeed
 		if not grnd then thv = thv * acf end
 		lvel.VectorVelocity = thv + cup * vvel
-		
+
+		local upDot = cup:Dot(Vector3.yAxis)
+		local onWall = grnd and upDot < 0.7
 		if grnd then
-			if imv then
+			if onWall and imv then
+				planim("climb", math.clamp(mm * 1.4, 0.55, 2))
+			elseif imv then
 				planim("walk")
 				updwrb(mm * hum.WalkSpeed)
 			else
@@ -944,6 +967,7 @@ _G.svcleanup = function()
 	atok += 1
 	mopen = false
 	for _, c in pairs(conns) do pcall(function() c:Disconnect() end) end
+	conns = {}
 	pcall(function() rs:UnbindFromRenderStep("wccr") end)
 	pcall(function() rs:UnbindFromRenderStep("wcct") end)
 	rnm()
