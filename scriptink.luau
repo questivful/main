@@ -246,6 +246,7 @@ log.ScrollBarThickness = 4
 log.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
 log.CanvasSize = UDim2.new(0, 0, 0, 0)
 log.AutomaticCanvasSize = Enum.AutomaticSize.Y
+log.ZIndex = 1
 log.Parent = pane
 
 local lay = Instance.new("UIListLayout")
@@ -330,6 +331,68 @@ suggPad.Parent = suggFrame
 
 local isBoxFocused = false
 local ts = game:GetService("TweenService")
+
+local welcome = Instance.new("Frame")
+welcome.Name = "Welcome"
+welcome.AnchorPoint = Vector2.new(0.5, 0.5)
+welcome.Position = UDim2.new(0.5, 0, 0.5, 0)
+welcome.Size = UDim2.new(0, 300, 0, 180)
+welcome.BackgroundTransparency = 1
+welcome.ZIndex = 10
+welcome.Parent = pane
+
+local welcomeLayout = Instance.new("UIListLayout")
+welcomeLayout.FillDirection = Enum.FillDirection.Vertical
+welcomeLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+welcomeLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+welcomeLayout.SortOrder = Enum.SortOrder.LayoutOrder
+welcomeLayout.Padding = UDim.new(0, 12)
+welcomeLayout.Parent = welcome
+
+local welcomeIcon = Instance.new("ImageLabel")
+welcomeIcon.Size = UDim2.new(0, 72, 0, 72)
+welcomeIcon.BackgroundTransparency = 1
+welcomeIcon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. plr.UserId .. "&w=150&h=150"
+welcomeIcon.LayoutOrder = 1
+welcomeIcon.Parent = welcome
+
+local welcomeIconCorner = Instance.new("UICorner")
+welcomeIconCorner.CornerRadius = UDim.new(0.5, 0)
+welcomeIconCorner.Parent = welcomeIcon
+
+local welcomeText = Instance.new("TextLabel")
+welcomeText.Size = UDim2.new(1, 0, 0, 24)
+welcomeText.BackgroundTransparency = 1
+welcomeText.Font = Enum.Font.Code
+welcomeText.TextSize = 16
+welcomeText.TextColor3 = Color3.fromRGB(230, 230, 230)
+welcomeText.Text = "Welcome, " .. plr.DisplayName
+welcomeText.LayoutOrder = 2
+welcomeText.Parent = welcome
+
+local welcomeSub = Instance.new("TextLabel")
+welcomeSub.Size = UDim2.new(1, 0, 0, 18)
+welcomeSub.BackgroundTransparency = 1
+welcomeSub.Font = Enum.Font.Code
+welcomeSub.TextSize = 12
+welcomeSub.TextColor3 = Color3.fromRGB(140, 140, 140)
+welcomeSub.Text = "type 'help' for commands"
+welcomeSub.LayoutOrder = 3
+welcomeSub.Parent = welcome
+
+local welcomeShown = true
+
+local function hideWelcome()
+    if not welcomeShown then return end
+    welcomeShown = false
+    local tinfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    ts:Create(welcomeText, tinfo, {TextTransparency = 1}):Play()
+    ts:Create(welcomeSub, tinfo, {TextTransparency = 1}):Play()
+    ts:Create(welcomeIcon, tinfo, {ImageTransparency = 1, Size = UDim2.new(0, 40, 0, 40)}):Play()
+    task.delay(0.45, function()
+        welcome.Visible = false
+    end)
+end
 
 box.MouseEnter:Connect(function()
     if box.Text == "" then
@@ -2262,22 +2325,19 @@ cmds.deflectaim = deflectAimCmd
 uis.InputBegan:Connect(function(input, gp)
     if gp then return end
     if uis:GetFocusedTextBox() then return end
-    if input.KeyCode == Enum.KeyCode.BackSlash then
+    if input.KeyCode == Enum.KeyCode.Quote then
         task.defer(function()
-            box.Text = "\\"
             box:CaptureFocus()
-            box.CursorPosition = 2
         end)
     end
 end)
-
-box.Focused:Connect(function() end)
 
 box.FocusLost:Connect(function(enter)
     if enter then
         local txt = box.Text
         box.Text = ""
         if txt:gsub("%s+", "") ~= "" then
+            hideWelcome()
             if txt:sub(1, 1) == "\\" then
                 local msg = txt:sub(2):gsub("^%s+", "")
                 out("> \\" .. msg, Color3.fromRGB(100, 200, 255))
@@ -2298,23 +2358,4 @@ box.FocusLost:Connect(function(enter)
     end
 end)
 
-win:Show()
-
-task.defer(function()
-    task.wait(0.1)
-    pcall(function()
-        win.AnchorPoint = Vector2.new(0.5, 0.5)
-        win.Position = UDim2.new(0.5, 0, 0.5, 0)
-        if win.Main and win.Main.AnchorPoint ~= nil then
-            win.Main.AnchorPoint = Vector2.new(0.5, 0.5)
-            win.Main.Position = UDim2.new(0.5, 0, 0.5, 0)
-        end
-        if win.Frame and win.Frame.AnchorPoint ~= nil then
-            win.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-            win.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-        end
-    end)
-end)
-
-out("@Questivful on discord / heavily inspired by vets panel.", Color3.fromRGB(200, 200, 200))
-out("type 'help' for commands. use '\\' for quick chat.", Color3.fromRGB(200, 200, 200))
+win:Show({Align = "right"})
