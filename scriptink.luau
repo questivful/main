@@ -24,7 +24,7 @@ local function matches(name)
 end
 
 local function newState()
-    return {main = nil, hide = nil, busy = false, timer = nil, hooks = {}}
+    return {main = nil, hide = nil, busy = false, timer = nil, hooks = {}, ammoConn = nil}
 end
 
 local function equip(tool)
@@ -63,22 +63,22 @@ local function swap(name, old, st)
     return true
 end
 
+local function isReloading(c)
+    if not c then return false end
+    local be = c:FindFirstChild("BodyEffects")
+    if not be then return false end
+    local r = be:FindFirstChild("Reload")
+    return r and r.Value == true
+end
+
 hook = function(name, tool, st)
     if not tool then return end
     local ammo = tool:WaitForChild("Ammo", 3)
     if not ammo then return end
-    local function isReloading()
-        local c = plr.Character
-        if not c then return false end
-        local be = c:FindFirstChild("BodyEffects")
-        if not be then return false end
-        local r = be:FindFirstChild("Reload")
-        return r and r.Value == true
-    end
     local function check()
         if st.main ~= tool then return end
         if tool.Parent ~= char and tool.Parent ~= pack then return end
-        if isReloading() then return end
+        if isReloading(plr.Character) then return end
         local val = ammo.Value
         if val <= 0 then
             if not swap(name, tool, st) then
@@ -88,7 +88,9 @@ hook = function(name, tool, st)
             fetch(name, st)
         end
     end
-    table.insert(st.hooks, ammo:GetPropertyChangedSignal("Value"):Connect(check))
+    if st.ammoConn then pcall(function() st.ammoConn:Disconnect() end) end
+    st.ammoConn = ammo:GetPropertyChangedSignal("Value"):Connect(check)
+    table.insert(st.hooks, st.ammoConn)
     check()
 end
 
@@ -125,10 +127,27 @@ local function catch(child)
     end)
 end
 
+local function clearState(st)
+    if st.hooks then
+        for _, c in ipairs(st.hooks) do pcall(function() c:Disconnect() end) end
+        st.hooks = {}
+    end
+    st.ammoConn = nil
+    if st.timer then pcall(function() task.cancel(st.timer) end) st.timer = nil end
+    if st.hide then pcall(function() st.hide:Destroy() end) st.hide = nil end
+    st.main = nil
+    st.busy = false
+end
+
 local function onRemoved(child)
     if not child:IsA("Tool") then return end
     local st = infAmmo.states[child.Name]
-    if not st or st.main ~= child then return end
+    if not st then return end
+    if child == st.hide then
+        st.hide = nil
+        return
+    end
+    if st.main ~= child then return end
     defer(function()
         if st.main == child and st.main.Parent ~= char and st.main.Parent ~= pack then
             st.main = nil
@@ -139,18 +158,11 @@ local function onRemoved(child)
             end
             fetch(child.Name, st)
         end
+        if not st.main and not st.hide then
+            clearState(st)
+            infAmmo.states[child.Name] = nil
+        end
     end)
-end
-
-local function clearState(st)
-    if st.hooks then
-        for _, c in ipairs(st.hooks) do pcall(function() c:Disconnect() end) end
-        st.hooks = {}
-    end
-    if st.timer then pcall(function() task.cancel(st.timer) end) st.timer = nil end
-    if st.hide then pcall(function() st.hide:Destroy() end) st.hide = nil end
-    st.main = nil
-    st.busy = false
 end
 
 local function stopAll()
@@ -185,7 +197,6 @@ local function start(query)
     else
         infAmmo.matchAll = true
     end
-
     pack = plr:WaitForChild("Backpack")
     table.insert(infAmmo.conns, pack.ChildAdded:Connect(catch))
     table.insert(infAmmo.conns, plr.CharacterAdded:Connect(function(body) defer(attachChar, body) end))
@@ -399,7 +410,7 @@ uis.InputBegan:Connect(function(input, gp)
 end)
 
 local playerCmds = {
-    ["kill"] = true, ["goto"] = true, ["tpto"] = true, ["bring"] = true, 
+    ["kill"] = true, ["goto"] = true, ["tpto"] = true, ["bring"] = true,
     ["freeze"] = true, ["thaw"] = true, ["loopkill"] = true
 }
 
@@ -443,9 +454,9 @@ box:GetPropertyChangedSignal("Text"):Connect(function()
     local txt = box.Text
     local args = string.split(txt, " ")
     local cmd = args[1] and args[1]:lower() or ""
-    
+
     local ghostText = ""
-    
+
     if txt == "" then
         ghostLbl.Text = ""
         box.TextColor3 = Color3.fromRGB(200, 255, 200)
@@ -460,8 +471,8 @@ box:GetPropertyChangedSignal("Text"):Connect(function()
                     if playerCmds[cname] and args[2] then
                         local q = table.concat(args, " ", 2):lower()
                         local firstMatchPlayer = nil
-                        local ps = game:GetService("Players")
-                        for _, p in ipairs(ps:GetPlayers()) do
+                        local psSrv = game:GetService("Players")
+                        for _, p in ipairs(psSrv:GetPlayers()) do
                             if q == "" or p.Name:lower():find(q, 1, true) or p.DisplayName:lower():find(q, 1, true) then
                                 firstMatchPlayer = p
                                 break
@@ -488,28 +499,28 @@ box:GetPropertyChangedSignal("Text"):Connect(function()
         if not matched then
             ghostText = ""
         end
-        
+
         ghostLbl.Text = ghostText
-        
+
         if cmdUsages[cmd] then
             box.TextColor3 = Color3.fromRGB(150, 255, 150)
         else
             box.TextColor3 = Color3.fromRGB(255, 255, 255)
         end
     end
-    
+
     if playerCmds[cmd] and args[2] then
         local q = table.concat(args, " ", 2):lower()
         clearSuggestions()
-        local count = 0
-        local ps = game:GetService("Players")
-        for _, p in ipairs(ps:GetPlayers()) do
+        local cnt = 0
+        local psSrv = game:GetService("Players")
+        for _, p in ipairs(psSrv:GetPlayers()) do
             if q == "" or p.Name:lower():find(q, 1, true) or p.DisplayName:lower():find(q, 1, true) then
-                count = count + 1
-                addSuggestion(p, count, args[1])
+                cnt = cnt + 1
+                addSuggestion(p, cnt, args[1])
             end
         end
-        if count > 0 then
+        if cnt > 0 then
             ts:Create(suggFrame, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(1, 0, 0, 40)}):Play()
         else
             ts:Create(suggFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, 0)}):Play()
@@ -521,6 +532,28 @@ box:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local count = 0
+local logLabels = {}
+local LOG_MAX = 120
+local scrollDirty = false
+local scrollRunning = false
+
+local function ensureScroller()
+    if scrollRunning then return end
+    scrollRunning = true
+    task.spawn(function()
+        local hb = game:GetService("RunService").Heartbeat
+        while scrollRunning do
+            hb:Wait()
+            if scrollDirty then
+                scrollDirty = false
+                pcall(function()
+                    log.CanvasPosition = Vector2.new(0, log.AbsoluteCanvasSize.Y)
+                end)
+            end
+        end
+    end)
+end
+
 local function out(text, color)
     count = count + 1
     local m = Instance.new("TextLabel")
@@ -535,10 +568,13 @@ local function out(text, color)
     m.Text = text
     m.LayoutOrder = count
     m.Parent = log
-    task.spawn(function()
-        game:GetService("RunService").RenderStepped:Wait()
-        log.CanvasPosition = Vector2.new(0, log.AbsoluteCanvasSize.Y)
-    end)
+    table.insert(logLabels, m)
+    if #logLabels > LOG_MAX then
+        local old = table.remove(logLabels, 1)
+        if old then old:Destroy() end
+    end
+    scrollDirty = true
+    ensureScroller()
 end
 
 local BLOCKED_ANIM_IDS = {
@@ -642,6 +678,7 @@ cmds.clear = function(a)
     for _, c in ipairs(log:GetChildren()) do
         if c:IsA("TextLabel") then c:Destroy() end
     end
+    logLabels = {}
     count = 0
     out("cleared.", Color3.fromRGB(150, 255, 150))
 end
@@ -762,21 +799,59 @@ end
 
 local noclip = false
 local noclipconn = nil
+local noclipParts = {}
+local noclipCacheConn = nil
+local noclipCharConn = nil
+
+local function refreshNoclipCache()
+    noclipParts = {}
+    local c = lp.Character
+    if c then
+        for _, v in ipairs(c:GetDescendants()) do
+            if v:IsA("BasePart") then
+                table.insert(noclipParts, v)
+            end
+        end
+    end
+end
+
+local function startNoclipCache()
+    if noclipCacheConn then pcall(function() noclipCacheConn:Disconnect() end) end
+    refreshNoclipCache()
+    local c = lp.Character
+    if c then
+        noclipCacheConn = c.DescendantAdded:Connect(function(v)
+            if v:IsA("BasePart") then
+                table.insert(noclipParts, v)
+            end
+        end)
+    end
+end
 
 cmds.noclip = function(a)
     noclip = not noclip
     if noclip then
+        startNoclipCache()
+        if noclipCharConn then pcall(function() noclipCharConn:Disconnect() end) end
+        noclipCharConn = lp.CharacterAdded:Connect(function()
+            if noclip then task.wait(0.1) startNoclipCache() end
+        end)
         noclipconn = game:GetService("RunService").Stepped:Connect(function()
-            local c = lp.Character
-            if c then
-                for _, v in ipairs(c:GetDescendants()) do
-                    if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+            for i = #noclipParts, 1, -1 do
+                local v = noclipParts[i]
+                if v.Parent then
+                    if v.CanCollide then v.CanCollide = false end
+                else
+                    table.remove(noclipParts, i)
                 end
             end
         end)
         out("noclip on", Color3.fromRGB(150, 255, 150))
     else
         if noclipconn then noclipconn:Disconnect() noclipconn = nil end
+        if noclipCacheConn then noclipCacheConn:Disconnect() noclipCacheConn = nil end
+        if noclipCharConn then noclipCharConn:Disconnect() noclipCharConn = nil end
+        noclipParts = {}
         out("noclip off", Color3.fromRGB(255, 200, 100))
     end
 end
@@ -807,7 +882,6 @@ cmds.fly = function(a)
         flybv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
         flybv.Parent = hr
 
-        local uis = game:GetService("UserInputService")
         local cam = workspace.CurrentCamera
         local speed = 50
 
@@ -838,6 +912,13 @@ cmds.respawn = function(a)
 end
 
 local frozen = {}
+
+ps.PlayerRemoving:Connect(function(p)
+    if frozen[p] then
+        pcall(function() frozen[p]:Destroy() end)
+        frozen[p] = nil
+    end
+end)
 
 cmds.freeze = function(a)
     if #a == 0 then out("usage: freeze ", Color3.fromRGB(255, 150, 150)) return end
@@ -915,11 +996,14 @@ end
 
 local espActive = false
 local espConnections = {}
+local espPlayerConns = {}
 local espData = {}
 local espColor1 = Color3.fromRGB(0, 150, 255)
 local espColor2 = Color3.fromRGB(240, 250, 255)
 local ESP_MAX_DISTANCE = 500
 local ESP_MIN_DISTANCE = 8
+local ESP_INTERVAL = 1 / 45
+local espLastTick = 0
 
 local espEdges = {
     {1, 2}, {2, 3}, {3, 4}, {4, 1},
@@ -965,16 +1049,22 @@ local function espCreate(player)
         table.insert(lines, line)
     end
 
+    local cf, size = character:GetBoundingBox()
+    local offset = hrp.CFrame:ToObjectSpace(cf)
+
     espData[player] = {
         folder = folder,
         lines = lines,
-        character = character
+        character = character,
+        bboxOffset = offset,
+        bboxSize = size
     }
 end
 
 local function espRemove(player)
-    if espData[player] then
-        if espData[player].folder then espData[player].folder:Destroy() end
+    local data = espData[player]
+    if data then
+        if data.folder then data.folder:Destroy() end
         espData[player] = nil
     end
 end
@@ -982,15 +1072,16 @@ end
 local function espSetupPlayer(player)
     if player == lp then return end
 
-    espAddConnection(player.CharacterAdded:Connect(function()
+    local conns = {}
+    table.insert(conns, player.CharacterAdded:Connect(function()
         espRemove(player)
         task.wait(0.3)
         if espActive then espCreate(player) end
     end))
-
-    espAddConnection(player.CharacterRemoving:Connect(function()
+    table.insert(conns, player.CharacterRemoving:Connect(function()
         espRemove(player)
     end))
+    espPlayerConns[player] = conns
 
     if player.Character and espActive then
         espCreate(player)
@@ -998,8 +1089,12 @@ local function espSetupPlayer(player)
 end
 
 local function espStop()
-    for _, conn in ipairs(espConnections) do conn:Disconnect() end
+    for _, conn in ipairs(espConnections) do pcall(function() conn:Disconnect() end) end
     espConnections = {}
+    for _, conns in pairs(espPlayerConns) do
+        for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    end
+    espPlayerConns = {}
     for _, data in pairs(espData) do
         if data.folder then data.folder:Destroy() end
     end
@@ -1009,14 +1104,26 @@ end
 local function espStart()
     espStop()
     espAddConnection(ps.PlayerAdded:Connect(espSetupPlayer))
-    espAddConnection(ps.PlayerRemoving:Connect(espRemove))
+    espAddConnection(ps.PlayerRemoving:Connect(function(p)
+        local conns = espPlayerConns[p]
+        if conns then
+            for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+            espPlayerConns[p] = nil
+        end
+        espRemove(p)
+    end))
     for _, p in ipairs(ps:GetPlayers()) do espSetupPlayer(p) end
 
     espAddConnection(game:GetService("RunService").RenderStepped:Connect(function()
+        local now = os.clock()
+        if now - espLastTick < ESP_INTERVAL then return end
+        espLastTick = now
+
         local myChar = lp.Character
         local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myPos = myHRP and myHRP.Position
 
-        local t = os.clock()
+        local t = now
         local lerpAlpha = (math.sin(t * 3) + 1) / 2
         local frostyColor = espColor1:Lerp(espColor2, lerpAlpha)
         local thickness = 2.5 + math.sin(t * 6) * 1
@@ -1031,17 +1138,15 @@ local function espStart()
             if character and data.folder then
                 local hrp = character:FindFirstChild("HumanoidRootPart")
                 if hrp then
-                    local distance = 0
-                    if myHRP then
-                        distance = (myHRP.Position - hrp.Position).Magnitude
+                    local visible = true
+                    if myPos then
+                        local d = (myPos - hrp.Position).Magnitude
+                        visible = d >= ESP_MIN_DISTANCE and d <= ESP_MAX_DISTANCE
                     end
 
-                    local visible = distance >= ESP_MIN_DISTANCE and distance <= ESP_MAX_DISTANCE
-
                     if visible then
-                        local cf, size = character:GetBoundingBox()
-                        cf = cf + shakeVec
-
+                        local cf = hrp.CFrame * data.bboxOffset + shakeVec
+                        local size = data.bboxSize
                         local sx, sy, sz = (size.X / 2) + 0.1, (size.Y / 2) + 0.1, (size.Z / 2) + 0.1
 
                         local corners = {
@@ -1056,11 +1161,12 @@ local function espStart()
                         }
 
                         local hrpCF = hrp.CFrame
+                        local lines = data.lines
 
                         for i, edgeInfo in ipairs(espEdges) do
                             local p1 = hrpCF:PointToObjectSpace(corners[edgeInfo[1]])
                             local p2 = hrpCF:PointToObjectSpace(corners[edgeInfo[2]])
-                            local line = data.lines[i]
+                            local line = lines[i]
 
                             local dist = (p2 - p1).Magnitude
                             if dist > 0.001 then
@@ -1117,7 +1223,7 @@ local loopkillActive = false
 local loopkillTarget = nil
 local loopkillThread = nil
 
-local gripMap = {}
+local gripMap = setmetatable({}, {__mode = "k"})
 
 local killAnimBlockCount = 0
 
@@ -1125,14 +1231,18 @@ local GunHandler = require(game:GetService("ReplicatedStorage").Modules.GunHandl
 
 local function collectGuns(c)
     local guns = {}
+    if not c then return guns end
     for _, v in ipairs(c:GetChildren()) do
         if v:IsA("Tool") and v:FindFirstChild("Handle") and v:FindFirstChild("Damage") and v:FindFirstChild("Range") then
             table.insert(guns, v)
         end
     end
-    for _, v in ipairs(lp.Backpack:GetChildren()) do
-        if v:IsA("Tool") and v:FindFirstChild("Handle") and v:FindFirstChild("Damage") and v:FindFirstChild("Range") then
-            table.insert(guns, v)
+    local bp = lp:FindFirstChild("Backpack")
+    if bp then
+        for _, v in ipairs(bp:GetChildren()) do
+            if v:IsA("Tool") and v:FindFirstChild("Handle") and v:FindFirstChild("Damage") and v:FindFirstChild("Range") then
+                table.insert(guns, v)
+            end
         end
     end
     return guns
@@ -1144,18 +1254,18 @@ local function reloadGun(gun, c, rem)
     if not am then return end
     local need = mx and mx.Value or 30
     if am.Value >= need then return end
-    local function isReloading()
+    local function isReloadingLocal()
         local be = c:FindFirstChild("BodyEffects")
         if not be then return false end
         local r = be:FindFirstChild("Reload")
         return r and r.Value == true
     end
-    if isReloading() then
-        while isReloading() do task.wait(0.05) end
+    if isReloadingLocal() then
+        while isReloadingLocal() do task.wait(0.05) end
     end
     rem:FireServer("Reload", gun:FindFirstChild("Handle"))
-    local to = tick() + 3
-    while isReloading() and tick() < to do task.wait(0.05) end
+    local to = os.clock() + 3
+    while isReloadingLocal() and os.clock() < to do task.wait(0.05) end
 end
 
 local function shootGun(gun, c, thrp, rem)
@@ -1288,7 +1398,7 @@ local function revertHitbox(hrp, origData, movedData)
     if not hrp or not origData[hrp] then return end
     local d = origData[hrp]
     if d.Connections then
-        for _, c1 in ipairs(d.Connections) do c1:Disconnect() end
+        for _, c1 in ipairs(d.Connections) do pcall(function() c1:Disconnect() end) end
     end
     for o, s in pairs(movedData) do
         if o and o.Parent then
@@ -1340,73 +1450,92 @@ local function killPlayer(tp, silent)
         startAnimBlock()
     end
 
-    local rs = game:GetService("ReplicatedStorage")
-    local rem = rs.MainRemotes.MainRemoteEvent
-
-    local guns = collectGuns(c)
-
-    if #guns == 0 then
-        if not silent then out("no guns found.", Color3.fromRGB(255, 100, 100)) end
+    local ended = false
+    local function _endKill()
+        if ended then return end
+        ended = true
         killAnimBlockCount = killAnimBlockCount - 1
         if killAnimBlockCount <= 0 then
             killAnimBlockCount = 0
             stopAnimBlock()
         end
+    end
+
+    local ok, err = pcall(function()
+        local rs = game:GetService("ReplicatedStorage")
+        local rem = rs.MainRemotes.MainRemoteEvent
+
+        local guns = collectGuns(c)
+
+        if #guns == 0 then
+            if not silent then out("no guns found.", Color3.fromRGB(255, 100, 100)) end
+            _endKill()
+            return false
+        end
+
+        local origData = {}
+        local movedData = setmetatable({}, {__mode = "k"})
+        applyHitbox(tc, thrp, origData, movedData)
+
+        local savedGrips = {}
+        for _, gun in ipairs(guns) do
+            if not gripMap[gun] then
+                gripMap[gun] = gun.GripPos
+            end
+            savedGrips[gun] = gripMap[gun]
+        end
+
+        for _, gun in ipairs(guns) do
+            if not thrp or not thrp.Parent then break end
+            local be = tc:FindFirstChild("BodyEffects")
+            if be and be:FindFirstChild("K.O") and be["K.O"].Value == true then break end
+            pcall(function()
+                if not gun.Parent then return end
+                if gun.Parent ~= c then gun.Parent = c end
+                h:EquipTool(gun)
+                gun.GripPos = Vector3.new(0, 10000, 0)
+                local am = gun:FindFirstChild("Ammo")
+                if am and am.Value < 1 then
+                    reloadGun(gun, c, rem)
+                end
+                shootGun(gun, c, thrp, rem)
+            end)
+        end
+
+        task.delay(0.5, function()
+            pcall(function()
+                revertHitbox(thrp, origData, movedData)
+                for k in pairs(movedData) do
+                    movedData[k] = nil
+                end
+                for _, gun in ipairs(guns) do
+                    if savedGrips[gun] and gun.Parent then
+                        gun.GripPos = savedGrips[gun]
+                    end
+                end
+                if h and h.Parent then
+                    h:UnequipTools()
+                end
+                local curH = c and c:FindFirstChildOfClass("Humanoid")
+                if curH then
+                    pcall(function()
+                        curH:ChangeState(Enum.HumanoidStateType.Running)
+                    end)
+                end
+            end)
+            _endKill()
+        end)
+
+        return true
+    end)
+
+    if not ok then
+        _endKill()
+        if not silent then out("kill error: " .. tostring(err), Color3.fromRGB(255, 100, 100)) end
         return false
     end
 
-    local origData = {}
-    local movedData = {}
-    applyHitbox(tc, thrp, origData, movedData)
-
-    local savedGrips = {}
-    for _, gun in ipairs(guns) do
-        if not gripMap[gun] then
-            gripMap[gun] = gun.GripPos
-        end
-        savedGrips[gun] = gripMap[gun]
-    end
-
-    for _, gun in ipairs(guns) do
-        if not thrp or not thrp.Parent then break end
-        local be = tc:FindFirstChild("BodyEffects")
-        if be and be:FindFirstChild("K.O") and be["K.O"].Value == true then break end
-        pcall(function()
-            if gun.Parent ~= c then gun.Parent = c end
-            h:EquipTool(gun)
-            gun.GripPos = Vector3.new(0, 10000, 0)
-            local am = gun:FindFirstChild("Ammo")
-            if am and am.Value < 1 then
-                reloadGun(gun, c, rem)
-            end
-            shootGun(gun, c, thrp, rem)
-        end)
-    end
-
-    task.delay(0.5, function()
-        pcall(function()
-            revertHitbox(thrp, origData, movedData)
-            for _, gun in ipairs(guns) do
-                if savedGrips[gun] then
-                    gun.GripPos = savedGrips[gun]
-                end
-            end
-            h:UnequipTools()
-            local curH = c and c:FindFirstChildOfClass("Humanoid")
-            if curH then
-                pcall(function()
-                    curH:ChangeState(Enum.HumanoidStateType.Running)
-                end)
-            end
-        end)
-        killAnimBlockCount = killAnimBlockCount - 1
-        if killAnimBlockCount <= 0 then
-            killAnimBlockCount = 0
-            stopAnimBlock()
-        end
-    end)
-
-    return true
+    return err
 end
 
 cmds.kill = function(a)
@@ -1536,8 +1665,8 @@ local autoMask = {
 }
 
 local function hasMaskTool()
-    local char = lp.Character
-    if char and char:FindFirstChild("[Mask]") then return true end
+    local c = lp.Character
+    if c and c:FindFirstChild("[Mask]") then return true end
     if lp.Backpack and lp.Backpack:FindFirstChild("[Mask]") then return true end
     return false
 end
@@ -1562,27 +1691,27 @@ end
 local function slot0(tool)
     if not tool then return end
     local backpack = lp:FindFirstChild("Backpack")
-    local char = lp.Character
-    if not backpack or not char then return end
-    
+    local c = lp.Character
+    if not backpack or not c then return end
+
     tool.Parent = nil
     task.wait(0.05)
-    
+
     local currentTools = {}
     for _, v in ipairs(backpack:GetChildren()) do
         if v:IsA("Tool") and v ~= tool then
             table.insert(currentTools, v)
         end
     end
-    for _, v in ipairs(char:GetChildren()) do
+    for _, v in ipairs(c:GetChildren()) do
         if v:IsA("Tool") and v ~= tool then
             table.insert(currentTools, v)
         end
     end
-    
+
     local numDummiesNeeded = 9 - #currentTools
     local dummies = {}
-    
+
     if numDummiesNeeded > 0 then
         for i = 1, numDummiesNeeded do
             local dummy = Instance.new("Tool")
@@ -1592,21 +1721,21 @@ local function slot0(tool)
             dummy.Parent = backpack
         end
     end
-    
+
     task.wait(0.05)
     tool.Parent = backpack
     task.wait(0.05)
-    
+
     for _, dummy in ipairs(dummies) do
         dummy:Destroy()
     end
 end
 
 local function executeMaskBuy()
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
+    local c = lp.Character
+    if not c then return end
+    local hrp = c:FindFirstChild("HumanoidRootPart")
+    local hum = c:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum then return end
     local head, cd = getMaskTarget()
     if not head or not cd then return end
@@ -1623,7 +1752,7 @@ local function executeMaskBuy()
         autoMask.spoofing = true
 
         local deadline = os.clock() + 1.5
-        while autoMask.active and not hasMaskTool() and os.clock() < deadline and lp.Character == char do
+        while autoMask.active and not hasMaskTool() and os.clock() < deadline and lp.Character == c do
             game:GetService("RunService").Heartbeat:Wait()
         end
 
@@ -1635,18 +1764,18 @@ local function executeMaskBuy()
             hrp.AssemblyAngularVelocity = Vector3.zero
         end
     else
-        for _ = 1, 25 do
+        for _ = 1, 5 do
             pcall(fireclickdetector, cd, 0)
         end
         local deadline = os.clock() + 1.5
-        while autoMask.active and not hasMaskTool() and os.clock() < deadline and lp.Character == char do
+        while autoMask.active and not hasMaskTool() and os.clock() < deadline and lp.Character == c do
             game:GetService("RunService").Heartbeat:Wait()
         end
     end
-    
+
     task.wait(0.1)
-    
-    local maskTool = char:FindFirstChild("[Mask]") or lp.Backpack:FindFirstChild("[Mask]")
+
+    local maskTool = c:FindFirstChild("[Mask]") or lp.Backpack:FindFirstChild("[Mask]")
     if maskTool then
         slot0(maskTool)
         hum:EquipTool(maskTool)
@@ -1695,14 +1824,14 @@ local function startAutoMask()
     end
 
     local rs = game:GetService("RunService")
-    
+
     autoMask.preSim = rs.PreSimulation:Connect(function()
         if not autoMask.spoofing or not autoMask.hrpRef or not autoMask.hrpRef.Parent then return end
         autoMask.hrpRef.CFrame = autoMask.targetCF
         autoMask.hrpRef.AssemblyLinearVelocity = Vector3.zero
         autoMask.hrpRef.AssemblyAngularVelocity = Vector3.zero
     end)
-    
+
     autoMask.postSim = rs.PostSimulation:Connect(function()
         if not autoMask.spoofing or not autoMask.hrpRef or not autoMask.hrpRef.Parent then return end
         if autoMask.clickCD then
@@ -1713,7 +1842,7 @@ local function startAutoMask()
         autoMask.hrpRef.AssemblyLinearVelocity = Vector3.zero
         autoMask.hrpRef.AssemblyAngularVelocity = Vector3.zero
     end)
-    
+
     rs:BindToRenderStep("HideSpoof", Enum.RenderPriority.Camera.Value - 1, function()
         if not autoMask.spoofing or not autoMask.hrpRef or not autoMask.hrpRef.Parent then return end
         autoMask.hrpRef.CFrame = autoMask.savedCF
@@ -1762,7 +1891,11 @@ local deflectAim = {
     conn = nil,
     busy = false,
     cooldowns = {},
-    aimStates = {}
+    aimStates = {},
+    lastTick = 0,
+    pruneTime = 0,
+    partsCache = nil,
+    partsTime = 0
 }
 
 local function reflectClearCharConns()
@@ -1814,6 +1947,7 @@ local function reflectKill(shooter, busyTable)
     if not shooter or not shooter.Parent then return end
     if not shooter.Character then return end
     if shooter == lp then return end
+    if busyTable.busy then return end
     busyTable.busy = true
     task.spawn(function()
         local wasActive = infAmmo.active
@@ -1872,7 +2006,7 @@ local function reflectStart()
         end
         if not shooter or shooter == lp then return end
         if not shooter.Character then return end
-        local now = tick()
+        local now = os.clock()
         if reflect.cooldowns[shooter] and now - reflect.cooldowns[shooter] < 0.3 then return end
         reflect.cooldowns[shooter] = now
         if reflect.busy then return end
@@ -1919,31 +2053,71 @@ local function deflectAimStart()
     deflectAim.active = true
     deflectAim.aimStates = {}
     deflectAim.cooldowns = {}
+    deflectAim.lastTick = 0
+    deflectAim.pruneTime = 0
+    deflectAim.partsCache = nil
+    deflectAim.partsTime = 0
 
     deflectAim.conn = game:GetService("RunService").RenderStepped:Connect(function()
         if not deflectAim.active then return end
+        local now = os.clock()
+        if now - deflectAim.lastTick < 1 / 25 then return end
+        deflectAim.lastTick = now
+
+        if now - deflectAim.pruneTime > 2 then
+            deflectAim.pruneTime = now
+            for p in pairs(deflectAim.aimStates) do
+                if not p.Parent then deflectAim.aimStates[p] = nil end
+            end
+            for p in pairs(deflectAim.cooldowns) do
+                if not p.Parent then deflectAim.cooldowns[p] = nil end
+            end
+        end
+
         local myChar = lp.Character
         if not myChar then return end
-        local parts = myParts(myChar)
+
+        if not deflectAim.partsCache or now - deflectAim.partsTime > 0.25 then
+            deflectAim.partsCache = myParts(myChar)
+            deflectAim.partsTime = now
+        end
+        local parts = deflectAim.partsCache
+        local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+        local myPos = myHRP and myHRP.Position
+
         for _, p in ipairs(ps:GetPlayers()) do
             if p ~= lp and p.Character then
                 local be = p.Character:FindFirstChild("BodyEffects")
                 local mp = be and be:FindFirstChild("MousePos")
                 if mp and typeof(mp.Value) == "Vector3" then
-                    local aiming = onTargetMouse(mp.Value, parts)
-                    if deflectAim.aimStates[p] == nil then deflectAim.aimStates[p] = false end
-                    if aiming and not deflectAim.aimStates[p] then
-                        deflectAim.aimStates[p] = true
-                        if not deflectAim.busy then
-                            local now = tick()
-                            if not deflectAim.cooldowns[p] or now - deflectAim.cooldowns[p] >= 0.3 then
-                                deflectAim.cooldowns[p] = now
-                                out("deflected " .. p.Name .. " (aim)", Color3.fromRGB(255, 100, 200))
-                                reflectKill(p, deflectAim)
+                    local skip = false
+                    if myPos then
+                        local pHRP = p.Character:FindFirstChild("HumanoidRootPart")
+                        if pHRP then
+                            if (pHRP.Position - myPos).Magnitude > 60 then
+                                skip = true
                             end
+                        else
+                            skip = true
                         end
-                    elseif not aiming and deflectAim.aimStates[p] then
-                        deflectAim.aimStates[p] = false
+                    end
+                    if skip then
+                        if deflectAim.aimStates[p] then deflectAim.aimStates[p] = false end
+                    else
+                        local aiming = onTargetMouse(mp.Value, parts)
+                        if deflectAim.aimStates[p] == nil then deflectAim.aimStates[p] = false end
+                        if aiming and not deflectAim.aimStates[p] then
+                            deflectAim.aimStates[p] = true
+                            if not deflectAim.busy then
+                                if not deflectAim.cooldowns[p] or now - deflectAim.cooldowns[p] >= 0.3 then
+                                    deflectAim.cooldowns[p] = now
+                                    out("deflected " .. p.Name .. " (aim)", Color3.fromRGB(255, 100, 200))
+                                    reflectKill(p, deflectAim)
+                                end
+                            end
+                        elseif not aiming and deflectAim.aimStates[p] then
+                            deflectAim.aimStates[p] = false
+                        end
                     end
                 end
             end
@@ -1957,6 +2131,7 @@ local function deflectAimStop()
     if deflectAim.conn then pcall(function() deflectAim.conn:Disconnect() end) deflectAim.conn = nil end
     deflectAim.cooldowns = {}
     deflectAim.aimStates = {}
+    deflectAim.partsCache = nil
 end
 
 local function deflectAimCmd(a)
@@ -2010,14 +2185,10 @@ task.defer(function()
     pcall(function()
         win.AnchorPoint = Vector2.new(0.5, 0.5)
         win.Position = UDim2.new(0.5, 0, 0.5, 0)
-    end)
-    pcall(function()
         if win.Main and win.Main.AnchorPoint ~= nil then
             win.Main.AnchorPoint = Vector2.new(0.5, 0.5)
             win.Main.Position = UDim2.new(0.5, 0, 0.5, 0)
         end
-    end)
-    pcall(function()
         if win.Frame and win.Frame.AnchorPoint ~= nil then
             win.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
             win.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
