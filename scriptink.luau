@@ -219,12 +219,20 @@ local function addQuery(query)
     rescan()
 end
 
-local url = "https://raw.githubusercontent.com/ruki3i/Creations/refs/heads/main/source/DockManager.luau"
-local dock = loadstring(game:HttpGet(url))()
+local dock = getgenv()._sspdockcontainer
+if not dock then
+    dock = loadstring(game:HttpGet("https://raw.githubusercontent.com/ruki3i/Creations/refs/heads/main/source/DockManager.luau"))()
+end
+
+if getgenv()._sriptinkWindow then
+    pcall(function() getgenv()._sriptinkWindow:Close() end)
+    getgenv()._sriptinkWindow = nil
+end
 
 dock.SetTheme(Color3.fromRGB(25, 25, 25))
 
 local win = dock.new("Sriptink (v1)", 450, 300)
+getgenv()._sriptinkWindow = win
 
 local pane = win.ContentPane
 
