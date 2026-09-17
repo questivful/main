@@ -1025,3 +1025,4 @@ _G.svcleanup = function()
 	if sgui then sgui:Destroy() end
 	if cgui then cgui:Destroy() end
 end
+print("ld")
