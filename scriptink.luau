@@ -257,7 +257,7 @@ box.TextSize = 14
 box.TextXAlignment = Enum.TextXAlignment.Left
 box.ClearTextOnFocus = false
 box.Text = ""
-box.PlaceholderText = "type a command..."
+box.PlaceholderText = "type a command... (\\ for chat)"
 box.PlaceholderColor3 = Color3.fromRGB(178, 178, 178)
 box.Parent = pane
 
@@ -409,6 +409,23 @@ uis.InputBegan:Connect(function(input, gp)
     end
 end)
 
+local function sendChat(msg)
+    if not msg or msg == "" then return end
+    local ok = pcall(function()
+        local tcs = game:GetService("TextChatService")
+        if tcs and tcs.ChatVersion == Enum.ChatVersion.TextChatService then
+            local channels = tcs:FindFirstChild("TextChannels")
+            local rb = channels and channels:FindFirstChild("RBXGeneral")
+            if rb then rb:SendAsync(msg) end
+        else
+            local dc = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+            local sayMsg = dc and dc:FindFirstChild("SayMessageRequest")
+            if sayMsg then sayMsg:FireServer(msg, "All") end
+        end
+    end)
+    return ok
+end
+
 local playerCmds = {
     ["kill"] = true, ["goto"] = true, ["tpto"] = true, ["bring"] = true,
     ["freeze"] = true, ["thaw"] = true, ["loopkill"] = true
@@ -447,11 +464,21 @@ local cmdUsages = {
     ["ws"] = "ws [number]",
     ["jp"] = "jp [number]",
     ["automask"] = "automask",
-    ["spiderverse"] = "spiderverse"
+    ["spiderverse"] = "spiderverse",
+    ["chat"] = "chat [message]"
 }
 
 box:GetPropertyChangedSignal("Text"):Connect(function()
     local txt = box.Text
+
+    if txt:sub(1, 1) == "\\" then
+        ghostLbl.Text = ""
+        box.TextColor3 = Color3.fromRGB(255, 220, 130)
+        clearSuggestions()
+        ts:Create(suggFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+        return
+    end
+
     local args = string.split(txt, " ")
     local cmd = args[1] and args[1]:lower() or ""
 
@@ -670,6 +697,8 @@ cmds.help = function(a)
     out(" deflectaim - auto-kill aimers (on/off)", Color3.fromRGB(180, 180, 180))
     out(" automask - auto-buy and equip mask", Color3.fromRGB(180, 180, 180))
     out(" spiderverse - load spiderverse script", Color3.fromRGB(180, 180, 180))
+    out(" chat - send a chat message", Color3.fromRGB(180, 180, 180))
+    out(" \\<msg> - quick chat shortcut", Color3.fromRGB(180, 180, 180))
     out(" ws - alias for speed", Color3.fromRGB(180, 180, 180))
     out(" jp - alias for jump", Color3.fromRGB(180, 180, 180))
 end
@@ -692,6 +721,13 @@ cmds.time = function(a) out("time: " .. os.date("%X"), Color3.fromRGB(255, 255, 
 
 cmds.whoami = function(a)
     out("you: " .. lp.Name .. " (@" .. lp.DisplayName .. ")", Color3.fromRGB(150, 200, 255))
+end
+
+cmds.chat = function(a)
+    if #a == 0 then out("usage: chat ", Color3.fromRGB(255, 150, 150)) return end
+    local msg = table.concat(a, " ")
+    out("> \\" .. msg, Color3.fromRGB(100, 200, 255))
+    sendChat(msg)
 end
 
 local function find(q)
@@ -1227,6 +1263,8 @@ local gripMap = setmetatable({}, {__mode = "k"})
 
 local killAnimBlockCount = 0
 
+local activeHitboxes = setmetatable({}, {__mode = "k"})
+
 local GunHandler = require(game:GetService("ReplicatedStorage").Modules.GunHandler)
 
 local function collectGuns(c)
@@ -1408,11 +1446,71 @@ local function revertHitbox(hrp, origData, movedData)
             end
         end
     end
-    hrp.Size = d.Size
-    hrp.Transparency = d.Transparency
-    hrp.Color = d.Color
-    hrp.CanCollide = d.CanCollide
+    if hrp.Parent then
+        hrp.Size = d.Size
+        hrp.Transparency = d.Transparency
+        hrp.Color = d.Color
+        hrp.CanCollide = d.CanCollide
+    end
     origData[hrp] = nil
+end
+
+local function forceRevert(tc)
+    local rec = activeHitboxes[tc]
+    if not rec then return end
+    activeHitboxes[tc] = nil
+    if rec.timer then pcall(function() task.cancel(rec.timer) end) end
+    if rec.destroyConn then pcall(function() rec.destroyConn:Disconnect() end) end
+    pcall(function()
+        revertHitbox(rec.hrp, rec.origData, rec.movedData)
+    end)
+    if rec.savedGrips then
+        for gun, grip in pairs(rec.savedGrips) do
+            if gun and gun.Parent then
+                pcall(function() gun.GripPos = grip end)
+            end
+        end
+    end
+    if rec.h and rec.h.Parent then
+        pcall(function() rec.h:UnequipTools() end)
+    end
+    if rec.char then
+        local curH = rec.char:FindFirstChildOfClass("Humanoid")
+        if curH then
+            pcall(function() curH:ChangeState(Enum.HumanoidStateType.Running) end)
+        end
+    end
+end
+
+local function applyHitboxSafe(tc, hrp, h, savedGrips)
+    local existing = activeHitboxes[tc]
+    if existing then
+        existing.savedGrips = savedGrips
+        if existing.timer then pcall(function() task.cancel(existing.timer) end) end
+        existing.timer = task.delay(3, function() forceRevert(tc) end)
+        return existing
+    end
+
+    local origData = {}
+    local movedData = setmetatable({}, {__mode = "k"})
+    applyHitbox(tc, hrp, origData, movedData)
+
+    local rec = {
+        hrp = hrp,
+        origData = origData,
+        movedData = movedData,
+        char = tc,
+        h = h,
+        savedGrips = savedGrips,
+    }
+    rec.destroyConn = tc.Destroying:Connect(function()
+        forceRevert(tc)
+    end)
+    rec.timer = task.delay(3, function()
+        forceRevert(tc)
+    end)
+    activeHitboxes[tc] = rec
+    return rec
 end
 
 local function killPlayer(tp, silent)
@@ -1473,10 +1571,6 @@ local function killPlayer(tp, silent)
             return false
         end
 
-        local origData = {}
-        local movedData = setmetatable({}, {__mode = "k"})
-        applyHitbox(tc, thrp, origData, movedData)
-
         local savedGrips = {}
         for _, gun in ipairs(guns) do
             if not gripMap[gun] then
@@ -1484,6 +1578,8 @@ local function killPlayer(tp, silent)
             end
             savedGrips[gun] = gripMap[gun]
         end
+
+        applyHitboxSafe(tc, thrp, h, savedGrips)
 
         for _, gun in ipairs(guns) do
             if not thrp or not thrp.Parent then break end
@@ -1503,26 +1599,7 @@ local function killPlayer(tp, silent)
         end
 
         task.delay(0.5, function()
-            pcall(function()
-                revertHitbox(thrp, origData, movedData)
-                for k in pairs(movedData) do
-                    movedData[k] = nil
-                end
-                for _, gun in ipairs(guns) do
-                    if savedGrips[gun] and gun.Parent then
-                        gun.GripPos = savedGrips[gun]
-                    end
-                end
-                if h and h.Parent then
-                    h:UnequipTools()
-                end
-                local curH = c and c:FindFirstChildOfClass("Humanoid")
-                if curH then
-                    pcall(function()
-                        curH:ChangeState(Enum.HumanoidStateType.Running)
-                    end)
-                end
-            end)
+            pcall(function() forceRevert(tc) end)
             _endKill()
         end)
 
@@ -1530,6 +1607,7 @@ local function killPlayer(tp, silent)
     end)
 
     if not ok then
+        pcall(function() forceRevert(tc) end)
         _endKill()
         if not silent then out("kill error: " .. tostring(err), Color3.fromRGB(255, 100, 100)) end
         return false
@@ -2157,22 +2235,40 @@ end
 
 cmds.deflectaim = deflectAimCmd
 
-local userTouched = false
+uis.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if uis:GetFocusedTextBox() then return end
+    if input.KeyCode == Enum.KeyCode.BackSlash then
+        task.defer(function()
+            box.Text = "\\"
+            box:CaptureFocus()
+            box.CursorPosition = 2
+        end)
+    end
+end)
 
-box.Focused:Connect(function() userTouched = true end)
+box.Focused:Connect(function() end)
 
 box.FocusLost:Connect(function(enter)
     if enter then
         local txt = box.Text
         box.Text = ""
         if txt:gsub("%s+", "") ~= "" then
-            out("> " .. txt, Color3.fromRGB(100, 200, 255))
-            local a = string.split(txt, " ")
-            local name = string.lower(table.remove(a, 1))
-            if cmds[name] then
-                pcall(function() cmds[name](a) end)
+            if txt:sub(1, 1) == "\\" then
+                local msg = txt:sub(2):gsub("^%s+", "")
+                out("> \\" .. msg, Color3.fromRGB(100, 200, 255))
+                if msg ~= "" then
+                    sendChat(msg)
+                end
             else
-                out("unknown: '" .. name .. "'. type 'help'.", Color3.fromRGB(255, 100, 100))
+                out("> " .. txt, Color3.fromRGB(100, 200, 255))
+                local a = string.split(txt, " ")
+                local name = string.lower(table.remove(a, 1))
+                if cmds[name] then
+                    pcall(function() cmds[name](a) end)
+                else
+                    out("unknown: '" .. name .. "'. type 'help'.", Color3.fromRGB(255, 100, 100))
+                end
             end
         end
     end
@@ -2197,4 +2293,4 @@ task.defer(function()
 end)
 
 out("@Questivful on discord / heavily inspired by vets panel.", Color3.fromRGB(200, 200, 200))
-out("type 'help' for commands.", Color3.fromRGB(200, 200, 200))
+out("type 'help' for commands. use '\\' for quick chat.", Color3.fromRGB(200, 200, 200))
