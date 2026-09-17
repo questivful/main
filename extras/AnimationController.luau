@@ -520,12 +520,17 @@ end
 local BaseGrey = Color3.fromRGB(25, 25, 25)
 local Theme = {
     Background = BaseGrey,
-    Hover = Color3.fromRGB(42, 42, 42),
-    Active = Color3.fromRGB(55, 55, 55),
-    Text = Color3.fromRGB(235, 235, 235),
-    TextDim = Color3.fromRGB(150, 150, 150),
+    Hover = Color3.fromRGB(55, 55, 55),
+    Active = Color3.fromRGB(65, 65, 65),
+    Text = Color3.fromRGB(255, 255, 255),
+    TextDim = Color3.fromRGB(145, 145, 145),
+    TextHover = Color3.fromRGB(210, 210, 210),
     Placeholder = Color3.fromRGB(120, 120, 120),
-    Danger = Color3.fromRGB(200, 80, 80),
+    Danger = Color3.fromRGB(230, 100, 100),
+    Divider = Color3.fromRGB(48, 48, 48),
+    Modal = Color3.fromRGB(40, 40, 40),
+    Input = Color3.fromRGB(30, 30, 30),
+    Stroke = Color3.fromRGB(70, 70, 70),
 }
 
 DockManager.SetTheme(BaseGrey)
@@ -537,7 +542,17 @@ local function new(class, props, parent)
     return inst
 end
 
-local window = DockManager.new("ANIMATION CONTROLLER", 440, 580)
+local function hoverTint(btn, baseColor, hoverColor)
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.12), { TextColor3 = hoverColor }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        if btn:GetAttribute("Selected") then return end
+        TweenService:Create(btn, TweenInfo.new(0.12), { TextColor3 = baseColor }):Play()
+    end)
+end
+
+local window = DockManager.new("Animation Changer", 440, 580)
 getgenv()._animWindow = window
 
 local root = new("Frame", {
@@ -552,12 +567,17 @@ local root = new("Frame", {
 local presetTooltip = new("Frame", {
     Name = "PresetTooltip",
     Size = UDim2.new(0, 150, 0, 50),
-    BackgroundColor3 = Theme.Active,
+    BackgroundColor3 = Color3.fromRGB(45, 45, 45),
     BorderSizePixel = 0,
     Visible = false,
     ZIndex = 50,
 }, root)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, presetTooltip)
+new("UICorner", { CornerRadius = UDim.new(0, 4) }, presetTooltip)
+new("UIStroke", {
+    Thickness = 1,
+    Color = Theme.Stroke,
+    Transparency = 0.2,
+}, presetTooltip)
 new("UIPadding", {
     PaddingLeft = UDim.new(0, 8),
     PaddingRight = UDim.new(0, 8),
@@ -571,7 +591,7 @@ new("UIListLayout", {
 
 local header = new("Frame", {
     Name = "Header",
-    Size = UDim2.new(1, 0, 0, 44),
+    Size = UDim2.new(1, 0, 0, 40),
     BackgroundColor3 = Theme.Background,
     BorderSizePixel = 0,
     ZIndex = 3,
@@ -579,113 +599,126 @@ local header = new("Frame", {
 
 local searchBox = new("TextBox", {
     Name = "SearchBox",
-    Size = UDim2.new(1, -20, 0, 32),
-    Position = UDim2.new(0, 10, 0, 6),
-    BackgroundColor3 = Theme.Hover,
+    Size = UDim2.new(1, 0, 1, 0),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Text = "",
     PlaceholderText = "Search animation bundles...",
     PlaceholderColor3 = Theme.Placeholder,
     TextColor3 = Theme.Text,
     Font = Enum.Font.Gotham,
-    TextSize = 13,
+    TextSize = 14,
     TextXAlignment = Enum.TextXAlignment.Left,
     TextTruncate = Enum.TextTruncate.AtEnd,
     ClearTextOnFocus = false,
     ZIndex = 4,
 }, header)
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, searchBox)
-new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }, searchBox)
+new("UIPadding", { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }, searchBox)
+
+new("Frame", {
+    Name = "HeaderDivider",
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = Theme.Divider,
+    BorderSizePixel = 0,
+    ZIndex = 4,
+}, header)
 
 local presetBar = new("Frame", {
     Name = "PresetBar",
-    Size = UDim2.new(1, 0, 0, 36),
-    Position = UDim2.new(0, 0, 0, 46),
+    Size = UDim2.new(1, 0, 0, 34),
+    Position = UDim2.new(0, 0, 0, 40),
     BackgroundColor3 = Theme.Background,
     BorderSizePixel = 0,
     ZIndex = 3,
 }, root)
 
 local presetScroll = new("ScrollingFrame", {
-    Size = UDim2.new(1, -65, 1, 0),
-    Position = UDim2.new(0, 5, 0, 0),
+    Name = "PresetScroll",
+    Size = UDim2.new(1, 0, 1, 0),
+    Position = UDim2.new(0, 0, 0, 0),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     CanvasSize = UDim2.new(0, 0, 0, 0),
     AutomaticCanvasSize = Enum.AutomaticSize.X,
     ScrollingDirection = Enum.ScrollingDirection.X,
     ScrollBarThickness = 0,
+    ScrollBarImageTransparency = 1,
     ZIndex = 4,
 }, presetBar)
 
 new("UIListLayout", {
     FillDirection = Enum.FillDirection.Horizontal,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 5),
+    Padding = UDim.new(0, 14),
     VerticalAlignment = Enum.VerticalAlignment.Center,
 }, presetScroll)
 
 new("UIPadding", {
-    PaddingLeft = UDim.new(0, 5),
-    PaddingRight = UDim.new(0, 5),
+    PaddingLeft = UDim.new(0, 14),
+    PaddingRight = UDim.new(0, 14),
     PaddingTop = UDim.new(0, 2),
     PaddingBottom = UDim.new(0, 2),
 }, presetScroll)
 
 local savePresetBtn = new("TextButton", {
     Name = "SavePreset",
-    Size = UDim2.new(0, 50, 1, -8),
-    Position = UDim2.new(1, -55, 0, 4),
-    BackgroundColor3 = Theme.Active,
+    Size = UDim2.new(0, 60, 0, 26),
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Text = "+ Save",
-    TextColor3 = Theme.Text,
-    Font = Enum.Font.GothamMedium,
-    TextSize = 11,
+    TextColor3 = Theme.TextDim,
+    Font = Enum.Font.GothamBold,
+    TextSize = 13,
     AutoButtonColor = false,
+    LayoutOrder = 999999,
+    ZIndex = 4,
+}, presetScroll)
+
+hoverTint(savePresetBtn, Theme.TextDim, Theme.Text)
+
+new("Frame", {
+    Name = "PresetDivider",
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = Theme.Divider,
+    BorderSizePixel = 0,
     ZIndex = 4,
 }, presetBar)
-
-new("UICorner", { CornerRadius = UDim.new(0, 4) }, savePresetBtn)
-
-savePresetBtn.MouseEnter:Connect(function()
-    TweenService:Create(savePresetBtn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Hover }):Play()
-end)
-savePresetBtn.MouseLeave:Connect(function()
-    TweenService:Create(savePresetBtn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Active }):Play()
-end)
 
 local catBar = new("Frame", {
     Name = "CategoryBar",
     Size = UDim2.new(1, 0, 0, 34),
-    Position = UDim2.new(0, 0, 0, 82),
+    Position = UDim2.new(0, 0, 0, 74),
     BackgroundColor3 = Theme.Background,
     BorderSizePixel = 0,
     ZIndex = 3,
 }, root)
 
 local catScroll = new("ScrollingFrame", {
-    Size = UDim2.new(1, -10, 1, 0),
-    Position = UDim2.new(0, 5, 0, 0),
+    Size = UDim2.new(1, 0, 1, 0),
+    Position = UDim2.new(0, 0, 0, 0),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     CanvasSize = UDim2.new(0, 0, 0, 0),
     AutomaticCanvasSize = Enum.AutomaticSize.X,
     ScrollingDirection = Enum.ScrollingDirection.X,
     ScrollBarThickness = 0,
+    ScrollBarImageTransparency = 1,
     ZIndex = 4,
 }, catBar)
 
 new("UIListLayout", {
     FillDirection = Enum.FillDirection.Horizontal,
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 5),
+    Padding = UDim.new(0, 16),
     VerticalAlignment = Enum.VerticalAlignment.Center,
 }, catScroll)
 
 new("UIPadding", {
-    PaddingLeft = UDim.new(0, 5),
-    PaddingRight = UDim.new(0, 5),
+    PaddingLeft = UDim.new(0, 14),
+    PaddingRight = UDim.new(0, 14),
     PaddingTop = UDim.new(0, 2),
     PaddingBottom = UDim.new(0, 2),
 }, catScroll)
@@ -694,56 +727,54 @@ local selectedCategory = "walk"
 local categoryButtons = {}
 
 local function updateCategoryStyles()
-    for cat, btn in pairs(categoryButtons) do
-        local hasOverride = getOverrides()[cat] ~= nil
+    for cat, data in pairs(categoryButtons) do
         if cat == selectedCategory then
-            btn.BackgroundColor3 = Theme.Active
-            btn.TextColor3 = Theme.Text
+            data.btn:SetAttribute("Selected", true)
+            TweenService:Create(data.btn, TweenInfo.new(0.12), { TextColor3 = Theme.Text }):Play()
         else
-            btn.BackgroundColor3 = Theme.Background
-            btn.TextColor3 = hasOverride and Theme.Text or Theme.TextDim
+            data.btn:SetAttribute("Selected", false)
+            TweenService:Create(data.btn, TweenInfo.new(0.12), { TextColor3 = Theme.TextDim }):Play()
         end
     end
 end
 
 for i, cat in ipairs(CATEGORIES) do
     local btn = new("TextButton", {
-        Size = UDim2.new(0, 62, 1, -4),
-        BackgroundColor3 = Theme.Background,
+        Size = UDim2.new(0, 60, 0, 24),
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         Text = cat,
         TextColor3 = Theme.TextDim,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 12,
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
         AutoButtonColor = false,
         LayoutOrder = i,
         ZIndex = 5,
     }, catScroll)
 
-    new("UICorner", { CornerRadius = UDim.new(0, 4) }, btn)
+    hoverTint(btn, Theme.TextDim, Theme.TextHover)
 
-    btn.MouseEnter:Connect(function()
-        if cat ~= selectedCategory then
-            TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Hover }):Play()
-        end
-    end)
-    btn.MouseLeave:Connect(function()
-        if cat ~= selectedCategory then
-            TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Background }):Play()
-        end
-    end)
     btn.MouseButton1Click:Connect(function()
         selectedCategory = cat
         updateCategoryStyles()
     end)
 
-    categoryButtons[cat] = btn
+    categoryButtons[cat] = { btn = btn }
 end
+
+new("Frame", {
+    Name = "CategoryDivider",
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = Theme.Divider,
+    BorderSizePixel = 0,
+    ZIndex = 4,
+}, catBar)
 
 local resultsPanel = new("Frame", {
     Name = "Results",
-    Size = UDim2.new(1, 0, 1, -140),
-    Position = UDim2.new(0, 0, 0, 116),
+    Size = UDim2.new(1, 0, 1, -138),
+    Position = UDim2.new(0, 0, 0, 108),
     BackgroundColor3 = Theme.Background,
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
@@ -752,63 +783,62 @@ local resultsPanel = new("Frame", {
 
 local resultsScroll = new("ScrollingFrame", {
     Name = "Scroll",
-    Size = UDim2.new(1, -10, 1, -10),
-    Position = UDim2.new(0, 5, 0, 5),
+    Size = UDim2.new(1, -12, 1, -12),
+    Position = UDim2.new(0, 6, 0, 6),
     BackgroundTransparency = 1,
     BorderSizePixel = 0,
     CanvasSize = UDim2.new(0, 0, 0, 0),
     AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    ScrollBarThickness = 4,
-    ScrollBarImageColor3 = Theme.TextDim,
+    ScrollBarThickness = 0,
+    ScrollBarImageTransparency = 1,
     ZIndex = 4,
 }, resultsPanel)
 
 new("UIListLayout", {
     SortOrder = Enum.SortOrder.LayoutOrder,
-    Padding = UDim.new(0, 4),
+    Padding = UDim.new(0, 6),
 }, resultsScroll)
 
 local footer = new("Frame", {
     Name = "Footer",
-    Size = UDim2.new(1, 0, 0, 24),
-    Position = UDim2.new(0, 0, 1, -24),
+    Size = UDim2.new(1, 0, 0, 26),
+    Position = UDim2.new(0, 0, 1, -26),
     BackgroundColor3 = Theme.Background,
     BorderSizePixel = 0,
     ZIndex = 3,
 }, root)
 
+new("Frame", {
+    Name = "FooterDivider",
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundColor3 = Theme.Divider,
+    BorderSizePixel = 0,
+    ZIndex = 4,
+}, footer)
+
 local function makeFooterButton(text, xOffset, width)
     local btn = new("TextButton", {
         Name = text .. "Btn",
-        Size = UDim2.new(0, width, 1, -4),
-        Position = UDim2.new(1, xOffset, 0, 2),
-        BackgroundColor3 = Theme.Background,
+        Size = UDim2.new(0, width, 1, 0),
+        Position = UDim2.new(1, xOffset, 0, 0),
+        BackgroundTransparency = 1,
         BorderSizePixel = 0,
         Text = text,
         TextColor3 = Theme.TextDim,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 12,
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
         AutoButtonColor = false,
         ZIndex = 4,
     }, footer)
 
-    new("UICorner", { CornerRadius = UDim.new(0, 4) }, btn)
-
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Hover }):Play()
-        btn.TextColor3 = Theme.Text
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Background }):Play()
-        btn.TextColor3 = Theme.TextDim
-    end)
-
+    hoverTint(btn, Theme.TextDim, Theme.Text)
     return btn
 end
 
-local resetBtn = makeFooterButton("Reset All", -75, 70)
-local saveBtn = makeFooterButton("Save", -150, 70)
-local loadBtn = makeFooterButton("Load", -225, 70)
+local resetBtn = makeFooterButton("Reset All", -70, 70)
+local saveBtn = makeFooterButton("Save", -140, 70)
+local loadBtn = makeFooterButton("Load", -210, 70)
 
 local function safeWrite(name, data)
     if not writefile then return false end
@@ -848,21 +878,26 @@ local modal = new("Frame", {
     Size = UDim2.new(0, 260, 0, 115),
     Position = UDim2.new(0.5, 0, 0.5, 0),
     AnchorPoint = Vector2.new(0.5, 0.5),
-    BackgroundColor3 = Theme.Active,
+    BackgroundColor3 = Theme.Modal,
     BorderSizePixel = 0,
     ZIndex = 20,
     Visible = false,
 }, window.GuiElems.Content)
 
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, modal)
+new("UICorner", { CornerRadius = UDim.new(0, 4) }, modal)
+new("UIStroke", {
+    Thickness = 1,
+    Color = Theme.Stroke,
+    Transparency = 0.2,
+}, modal)
 
 local modalLabel = new("TextLabel", {
     Size = UDim2.new(1, -20, 0, 20),
     Position = UDim2.new(0, 10, 0, 8),
     BackgroundTransparency = 1,
     Text = "Preset name:",
-    TextColor3 = Theme.Text,
-    Font = Enum.Font.GothamMedium,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    Font = Enum.Font.GothamBold,
     TextSize = 13,
     TextXAlignment = Enum.TextXAlignment.Left,
     ZIndex = 21,
@@ -871,12 +906,12 @@ local modalLabel = new("TextLabel", {
 local modalBox = new("TextBox", {
     Size = UDim2.new(1, -20, 0, 32),
     Position = UDim2.new(0, 10, 0, 32),
-    BackgroundColor3 = Theme.Hover,
+    BackgroundColor3 = Theme.Input,
     BorderSizePixel = 0,
     Text = "",
     PlaceholderText = "e.g. Ninja",
     PlaceholderColor3 = Theme.Placeholder,
-    TextColor3 = Theme.Text,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
     Font = Enum.Font.Gotham,
     TextSize = 13,
     TextXAlignment = Enum.TextXAlignment.Left,
@@ -885,38 +920,43 @@ local modalBox = new("TextBox", {
     ZIndex = 21,
 }, modal)
 
-new("UICorner", { CornerRadius = UDim.new(0, 6) }, modalBox)
+new("UICorner", { CornerRadius = UDim.new(0, 4) }, modalBox)
+new("UIStroke", {
+    Thickness = 1,
+    Color = Theme.Stroke,
+    Transparency = 0.4,
+}, modalBox)
 new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }, modalBox)
 
 local modalConfirm = new("TextButton", {
     Size = UDim2.new(0, 70, 0, 24),
-    Position = UDim2.new(1, -80, 1, -34),
-    BackgroundColor3 = Theme.Hover,
+    Position = UDim2.new(1, -80, 1, -32),
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Text = "Save",
     TextColor3 = Theme.Text,
-    Font = Enum.Font.GothamMedium,
+    Font = Enum.Font.GothamBold,
     TextSize = 12,
     AutoButtonColor = false,
     ZIndex = 21,
 }, modal)
 
-new("UICorner", { CornerRadius = UDim.new(0, 4) }, modalConfirm)
+hoverTint(modalConfirm, Theme.Text, Theme.TextHover)
 
 local modalCancel = new("TextButton", {
     Size = UDim2.new(0, 70, 0, 24),
-    Position = UDim2.new(1, -160, 1, -34),
-    BackgroundColor3 = Theme.Background,
+    Position = UDim2.new(1, -160, 1, -32),
+    BackgroundTransparency = 1,
     BorderSizePixel = 0,
     Text = "Cancel",
     TextColor3 = Theme.TextDim,
-    Font = Enum.Font.GothamMedium,
+    Font = Enum.Font.GothamBold,
     TextSize = 12,
     AutoButtonColor = false,
     ZIndex = 21,
 }, modal)
 
-new("UICorner", { CornerRadius = UDim.new(0, 4) }, modalCancel)
+hoverTint(modalCancel, Theme.TextDim, Theme.TextHover)
 
 local function refreshPresetButtons()
     for _, btn in pairs(presetButtons) do
@@ -932,21 +972,20 @@ local function refreshPresetButtons()
 
     for i, name in ipairs(keys) do
         local btn = new("TextButton", {
-            Size = UDim2.new(0, 110, 1, -4),
-            BackgroundColor3 = Theme.Background,
+            Size = UDim2.new(0, 110, 0, 26),
+            BackgroundTransparency = 1,
             BorderSizePixel = 0,
             Text = name,
             TextColor3 = Theme.TextDim,
-            Font = Enum.Font.GothamMedium,
-            TextSize = 11,
+            Font = Enum.Font.GothamBold,
+            TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             AutoButtonColor = false,
             LayoutOrder = i,
             ZIndex = 5,
         }, presetScroll)
 
-        new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 26) }, btn)
-        new("UICorner", { CornerRadius = UDim.new(0, 4) }, btn)
+        new("UIPadding", { PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 22) }, btn)
 
         local del = new("TextButton", {
             Size = UDim2.new(0, 18, 0, 18),
@@ -955,7 +994,7 @@ local function refreshPresetButtons()
             Text = "X",
             TextColor3 = Theme.TextDim,
             Font = Enum.Font.GothamBold,
-            TextSize = 10,
+            TextSize = 11,
             AutoButtonColor = false,
             ZIndex = 6,
         }, btn)
@@ -967,10 +1006,9 @@ local function refreshPresetButtons()
             del.TextColor3 = Theme.TextDim
         end)
 
-        btn.MouseEnter:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Hover }):Play()
-            btn.TextColor3 = Theme.Text
+        hoverTint(btn, Theme.TextDim, Theme.Text)
 
+        btn.MouseEnter:Connect(function()
             for _, c in ipairs(presetTooltip:GetChildren()) do
                 if c:IsA("TextLabel") then c:Destroy() end
             end
@@ -984,7 +1022,7 @@ local function refreshPresetButtons()
                         Size = UDim2.new(1, 0, 0, 14),
                         BackgroundTransparency = 1,
                         Text = cat .. ": " .. tostring(id),
-                        TextColor3 = Theme.TextDim,
+                        TextColor3 = Color3.fromRGB(255, 255, 255),
                         Font = Enum.Font.Gotham,
                         TextSize = 11,
                         TextXAlignment = Enum.TextXAlignment.Left,
@@ -996,7 +1034,7 @@ local function refreshPresetButtons()
                         Size = UDim2.new(1, 0, 0, 14),
                         BackgroundTransparency = 1,
                         Text = "Empty Preset",
-                        TextColor3 = Theme.TextDim,
+                        TextColor3 = Color3.fromRGB(255, 255, 255),
                         Font = Enum.Font.Gotham,
                         TextSize = 11,
                         TextXAlignment = Enum.TextXAlignment.Left,
@@ -1023,8 +1061,6 @@ local function refreshPresetButtons()
         end)
 
         btn.MouseLeave:Connect(function()
-            TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Background }):Play()
-            btn.TextColor3 = Theme.TextDim
             presetTooltip.Visible = false
         end)
 
@@ -1059,9 +1095,12 @@ modalCancel.MouseButton1Click:Connect(function()
     modal.Visible = false
 end)
 
-modalConfirm.MouseButton1Click:Connect(function()
+local function confirmSave()
     local name = modalBox.Text
-    if not name or name == "" then return end
+    if not name or name == "" then
+        modal.Visible = false
+        return
+    end
     presets[name] = table.clone(getOverrides())
     savePresetsFile(presets)
     refreshPresetButtons()
@@ -1072,20 +1111,12 @@ modalConfirm.MouseButton1Click:Connect(function()
             savePresetBtn.Text = "+ Save"
         end
     end)
-end)
+end
+
+modalConfirm.MouseButton1Click:Connect(confirmSave)
 
 modalBox.FocusLost:Connect(function(enter)
-    if enter then
-        local name = modalBox.Text
-        if not name or name == "" then
-            modal.Visible = false
-            return
-        end
-        presets[name] = table.clone(getOverrides())
-        savePresetsFile(presets)
-        refreshPresetButtons()
-        modal.Visible = false
-    end
+    if enter then confirmSave() end
 end)
 
 UserInputService.InputBegan:Connect(function(input, gp)
@@ -1329,8 +1360,9 @@ end
 
 local function createEntry(bundle, order)
     local row = new("TextButton", {
-        Size = UDim2.new(1, 0, 0, 68),
-        BackgroundColor3 = Theme.Background,
+        Size = UDim2.new(1, 0, 0, 72),
+        BackgroundColor3 = Color3.fromRGB(38, 38, 38),
+        BackgroundTransparency = 0,
         BorderSizePixel = 0,
         Text = "",
         AutoButtonColor = false,
@@ -1338,10 +1370,16 @@ local function createEntry(bundle, order)
         ZIndex = 4,
     })
 
-    new("UICorner", { CornerRadius = UDim.new(0, 6) }, row)
+    new("UICorner", { CornerRadius = UDim.new(0, 4) }, row)
+    local rowStroke = new("UIStroke", {
+        Thickness = 1,
+        Color = Theme.Stroke,
+        Transparency = 0.5,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, row)
 
     local viewport = new("ViewportFrame", {
-        Size = UDim2.new(0, 56, 0, 56),
+        Size = UDim2.new(0, 60, 0, 60),
         Position = UDim2.new(0, 6, 0, 6),
         BackgroundColor3 = Theme.Hover,
         BorderSizePixel = 0,
@@ -1370,26 +1408,26 @@ local function createEntry(bundle, order)
     end
 
     new("TextLabel", {
-        Size = UDim2.new(1, -74, 0, 18),
-        Position = UDim2.new(0, 68, 0, 10),
+        Size = UDim2.new(1, -78, 0, 18),
+        Position = UDim2.new(0, 72, 0, 12),
         BackgroundTransparency = 1,
         Text = bundle.Name or "Unknown",
-        TextColor3 = Theme.Text,
-        Font = Enum.Font.GothamMedium,
-        TextSize = 13,
+        TextColor3 = Color3.fromRGB(255, 255, 255),
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 5,
     }, row)
 
     new("TextLabel", {
-        Size = UDim2.new(1, -74, 0, 14),
-        Position = UDim2.new(0, 68, 0, 30),
+        Size = UDim2.new(1, -78, 0, 14),
+        Position = UDim2.new(0, 72, 0, 34),
         BackgroundTransparency = 1,
         Text = "Animation Package",
-        TextColor3 = Theme.TextDim,
+        TextColor3 = Color3.fromRGB(220, 220, 220),
         Font = Enum.Font.Gotham,
-        TextSize = 11,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         TextTruncate = Enum.TextTruncate.AtEnd,
         ZIndex = 5,
@@ -1416,10 +1454,16 @@ local function createEntry(bundle, order)
 
     row.MouseEnter:Connect(function()
         TweenService:Create(row, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Hover }):Play()
+        if rowStroke then
+            TweenService:Create(rowStroke, TweenInfo.new(0.12), { Transparency = 0.2 }):Play()
+        end
         loadPreview()
     end)
     row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.12), { BackgroundColor3 = Theme.Background }):Play()
+        TweenService:Create(row, TweenInfo.new(0.12), { BackgroundColor3 = Color3.fromRGB(38, 38, 38) }):Play()
+        if rowStroke then
+            TweenService:Create(rowStroke, TweenInfo.new(0.12), { Transparency = 0.5 }):Play()
+        end
     end)
 
     row.MouseButton1Click:Connect(function()
@@ -1490,16 +1534,16 @@ local function performSearch(query)
     searchToken = searchToken + 1
     local myToken = searchToken
 
-    if query == "" then
-        clearResults()
-        return
+    local actualQuery = query
+    if actualQuery == "" then
+        actualQuery = "Rthro"
     end
 
     clearResults()
 
     task.spawn(function()
         local params = CatalogSearchParams.new()
-        params.SearchKeyword = query
+        params.SearchKeyword = actualQuery
         params.BundleTypes = { Enum.BundleType.Animations }
         params.IncludeOffSale = true
         params.Limit = RESULT_LIMIT
@@ -1539,3 +1583,8 @@ end)
 
 updateCategoryStyles()
 window:Show({ Align = "left", Pos = 1 })
+
+task.defer(function()
+    task.wait(0.2)
+    performSearch("")
+end)
